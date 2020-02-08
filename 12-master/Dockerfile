@@ -1,15 +1,93 @@
 FROM postgres:12
 LABEL maintainer="Mike Dillon <mike@appropriate.io>"
 
-ENV POSTGIS_MAJOR 3
-ENV POSTGIS_VERSION 3.0.0+dfsg-2~exp1.pgdg100+1
+ENV GEOS_VERSION 3.8.0
+ENV GEOS_SHA256 99114c3dc95df31757f44d2afde73e61b9f742f0b683fd1894cbbee05dda62d5
 
-RUN apt-get update \
-      && apt-cache showpkg postgresql-$PG_MAJOR-postgis-$POSTGIS_MAJOR \
-      && apt-get install -y --no-install-recommends \
-           postgresql-$PG_MAJOR-postgis-$POSTGIS_MAJOR=$POSTGIS_VERSION \
-           postgresql-$PG_MAJOR-postgis-$POSTGIS_MAJOR-scripts=$POSTGIS_VERSION \
-      && rm -rf /var/lib/apt/lists/*
+RUN set -ex \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends \
+      bison \
+      git \
+      autoconf2.13 \
+      autotools-dev \
+      libgdal-dev \
+      libjson-c-dev \
+      libproj-dev \
+      libprotobuf-c-dev \
+      libxml2-dev \
+      libsfcgal-dev \
+      postgresql-server-dev-12 \
+      protobuf-c-compiler \
+      g++ \
+      make \
+      ca-certificates \
+      libtool \
+      curl \
+      openssl \
+      xsltproc \
+    && mkdir -p /usr/src/geos \
+    && cd /usr/src \
+    && curl -o geos.tar.bz2 "http://download.osgeo.org/geos/geos-$GEOS_VERSION.tar.bz2" \
+    && echo "$GEOS_SHA256 *geos.tar.bz2" | sha256sum -c - \
+    && tar \
+        --extract \
+        --file geos.tar.bz2 \
+        --directory /usr/src/geos \
+        --strip-components 1 \
+    && rm geos.tar.bz2 \
+    && cd /usr/src/geos \
+    && ./configure \
+    && make \
+    && make install \
+    && cd /usr/src \
+    && rm -fr /usr/src/geos \
+    && git clone https://git.osgeo.org/gitea/postgis/postgis.git postgis \
+    && cd /usr/src/postgis \
+    && ./autogen.sh \
+# configure options taken from:
+# https://anonscm.debian.org/cgit/pkg-grass/postgis.git/tree/debian/rules?h=jessie
+    && ./configure \
+#       --with-gui \
+    && make \
+    && make install \
+    && cd / \
+    && rm -rf /usr/src/postgis \
+    && apt-get purge -y --autoremove \
+      bison \
+      git \
+      autoconf2.13 \
+      autotools-dev \
+      libgdal-dev \
+      libjson-c-dev \
+      libproj-dev \
+      libprotobuf-c-dev \
+      libxml2-dev \
+      libsfcgal-dev \
+      protobuf-c-compiler \
+      g++ \
+      make \
+      gcc \
+      libc6-dev \
+      linux-libc-dev \
+      libgcc-8-dev \
+      postgresql-server-dev-12 \
+      autoconf \
+      cpp \
+      cpp-8 \
+      ca-certificates \
+      libtool \
+      curl \
+      xsltproc \
+    && apt-get install -y --no-install-recommends \
+      libgdal20 \
+      libjson-c3 \
+      libproj13 \
+      libprotobuf-c1 \
+      libxml2 \
+      libsfcgal1 \
+      libsfcgal-osg1 \
+    && rm -rf /var/lib/apt/lists/*
 
 RUN mkdir -p /docker-entrypoint-initdb.d
 COPY ./initdb-postgis.sh /docker-entrypoint-initdb.d/postgis.sh
